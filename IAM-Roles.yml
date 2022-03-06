@@ -1,0 +1,1321 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This AWS CloudFormation Template is for Herc Rentals IAM Roles'
+#-----------------------------------------------------------------------------
+# The following Roles are created through this template: 
+# TelematicsCodebuildIAMRole, TelematicsCodepipelineIAMRole, TelematicsLambdaAccessRole
+# TelematicsEKSclusterRole, TelematicsKinesisDataAnalyticsRole, TelematicsKinesisDataFirehoseRole
+#-----------------------------------------------------------------------------
+
+Parameters:
+  
+  EnvType:
+    Description: 'Environment: dev,qa,stg,prod'
+    Type: String
+    Default: qa
+    AllowedValues:
+    - dev
+    - qa
+    - stg
+    - prod
+    ConstraintDescription: must be either 'dev','qa','stg' or 'prod'
+
+  Project:
+    Description: 'Prefix for Roles'
+    Type: String
+    Default: Telematics
+    AllowedValues:
+    - Telematics
+    - ProjectName  
+    ConstraintDescription: must be either 'Telematics','ProjectName'
+  
+#-----------------------------------------------------------------------------
+# All IAM Roles for Code Build,Code Pipeline, Lambda and MicroServices
+#-----------------------------------------------------------------------------
+
+Resources:
+
+  #-----------------------------------------------------------------------------
+  # Codebuild Micro Service IAM Role
+  #-----------------------------------------------------------------------------
+  
+  # This Role for Codebuild
+  
+  TelematicsCodebuildIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role to provide access to Codebuld
+      #RoleName: TelematicsCodebuildIAMRole
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - CodebuildIAMRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+              - cloudformation.amazonaws.com
+              - sts.amazonaws.com
+          Action: 'sts:AssumeRole'
+
+      Policies:
+        # - PolicyName: TelematicsvpcPolicy
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - vpcPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 'cloudformation:*'
+                Resource: '*'
+              - Effect: "Allow"
+                Action:
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:CreateNetworkInterfacePermission"
+                  - "ec2:DetachNetworkInterface"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:DescribeDhcpOptions"
+                  - "ec2:DescribeSecurityGroups"
+                  - "ec2:DescribeSubnets"
+                  - "ec2:DescribeVpcs"
+                  - "ec2:AssignPrivateIpAddresses"
+                  - "ec2:UnassignPrivateIpAddresses"
+                  - "ec2:AttachNetworkInterface"
+                  - "eks:DescribeCluster"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:CreateTable"
+                  - "dynamodb:DeleteTable"
+                  - "kinesis:DescribeStreamSummary"
+                  - "kinesis:DeleteStream"
+                  - "kinesis:CreateStream"
+                  - "kinesis:AddTagsToStream"
+                  - "appsync:*"
+                  - "appsync:DeleteDataSource"
+                  - "appsync:DeleteResolver"
+                  - "appsync:DeleteGraphqlApi"
+                  - "appsync:DeleteApiKey"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "lambda:UpdateFunctionCode"
+                  - 'lambda:*'
+                  - "sqs:*"
+                  - "application-autoscaling:DeleteScalingPolicy"
+                  - "application-autoscaling:DeregisterScalableTarget"
+                  - "application-autoscaling:DescribeScalableTargets"
+                  - "application-autoscaling:DescribeScalingActivities"
+                  - "application-autoscaling:DescribeScalingPolicies"
+                  - "application-autoscaling:PutScalingPolicy"
+                  - "application-autoscaling:RegisterScalableTarget"
+                Resource: "*"
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+  
+  SecretManagerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Managed Policy to codebuild Role
+      #ManagedPolicyName: TelematicsCodebuildMicroServicebuildallPolicy
+      ManagedPolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - microservicepoliciescodebuild
+      Path: /
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'secretsmanager:GetSecretValue'
+              - 'secretsmanager:GetRandomPassword'
+              - 'secretsmanager:GetResourcePolicy'
+              - 'secretsmanager:UntagResource'
+              - 'secretsmanager:DescribeSecret'
+              - 'secretsmanager:ListSecretVersionIds'
+              - 'secretsmanager:ListSecrets'
+              - 'secretsmanager:TagResource'
+              - 'codecommit:*'
+              - 'codebuild:*'
+              - 'cloudtrail:*'
+              - 'codepipeline:*'
+              - 'cloudformation:*'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ecr:BatchCheckLayerAvailability'
+              - 'ecr:BatchGetImage'
+              - 'ecr:CompleteLayerUpload'
+              - 'ecr:GetAuthorizationToken'
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:PutImage'
+              - 'ecr:BatchGetImage'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:PullImage'
+              - 'iam:PassRole'
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+              - 'ssm:GetParameters'
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - 'events:PutRule'
+              - 'events:PutTargets'
+              - 'events:DeleteRule'
+              - 'events:DisableRule'
+              - 'events:RemoveTargets'
+              - 'events:DescribeRule'
+              - 'sns:ListTopics'
+              - 'sqs:GetQueueUrl'
+              - 'ssm:GetParameters'
+              - 'codestar-notifications:*'
+              - 'states:ListStateMachines'
+              - 'devicefarm:GetDevicePool'
+              - 'devicefarm:GetProject'
+              - 'devicefarm:ListDevicePools'
+              - 'devicefarm:ListProjects'
+            Resource: "*"
+      Roles: 
+        - !Ref TelematicsCodebuildIAMRole
+  
+  #-----------------------------------------------------------------------------
+  # Codepipeline Micro Service IAM Role
+  #-----------------------------------------------------------------------------
+  
+  # This Role for Codepipeline
+  
+  TelematicsCodepipelineIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      #RoleName: TelematicsCodepipelineIAMRole
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - CodepipelineIAMRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: "Allow"
+          Principal:
+            Service: "codepipeline.amazonaws.com"
+          Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: TelematicsCodeCommit
+          PolicyDocument: 
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action:
+                  - 'codecommit:GetBranch'
+                  - 'codecommit:GetCommit'
+                  - 'codecommit:UploadArchive'
+                  - 'codecommit:GetUploadArchiveStatus'
+                  - 'codecommit:CancelUploadArchive'
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:DetachNetworkInterface"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:AssignPrivateIpAddresses"
+                  - "ec2:UnassignPrivateIpAddresses"
+                  - "ec2:AttachNetworkInterface"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+        - PolicyName: Telematicscodebuild
+          PolicyDocument: 
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                  - 'secretsmanager:GetRandomPassword'
+                  - 'secretsmanager:GetResourcePolicy'
+                  - 'secretsmanager:UntagResource'
+                  - 'secretsmanager:DescribeSecret'
+                  - 'secretsmanager:ListSecretVersionIds'
+                  - 'secretsmanager:ListSecrets'
+                  - 'secretsmanager:TagResource'
+                Resource: "*"
+              - Effect: Allow
+                Action: "secretsmanager:GetRandomPassword"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - 'codebuild:*'
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - 'codedeploy:*'
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - 'elasticbeanstalk:*'
+                  - 'ec2:*'
+                  - 'elasticloadbalancing:*'
+                  - 'autoscaling:*'
+                  - 'sns:*'
+                  - 'cloudformation:*'
+                  - 'rds:*'
+                  - 'sqs:*'
+                  - 'ecs:*'
+                  - 'ecr:*'
+                  - 'eks:*'
+                  - 'iam:PassRole'
+                  - 'dynamodb:*'
+                  - 'kinesis:*'
+                  - 'lambda:*'
+                  - 'apigateway:*'
+                  - 'events:*'
+                  - 'appsync:*'
+                Resource: "*"
+              # - Effect: Allow
+              #   Action:
+              #     - 'lambda:*'
+              #     - 'lambda:UpdateFunctionCode'
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - 'opsworks:CreateDeployment'
+                  - 'opsworks:DescribeApps'
+                  - 'opsworks:DescribeCommands'
+                  - 'opsworks:DescribeDeployments'
+                  - 'opsworks:DescribeInstances'
+                  - 'opsworks:DescribeStacks'
+                  - 'opsworks:UpdateApp'
+                  - 'opsworks:UpdateStack'
+                Resource: "*"
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+
+  #-----------------------------------------------------------------------------
+  # This Role for All Telematics Lambda's
+  #-----------------------------------------------------------------------------
+
+  TelematicsLambdaAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+    #RoleName: TelematicsLambdaAccessRole
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - LambdaAccessRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+        #- arn:aws:iam::aws:policy/CloudWatchFullAccess
+        #- arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+        #- arn:aws:iam::aws:policy/AmazonSNSFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+
+      Policies:
+      #- PolicyName: TelematicsLambdadynamodbaccess
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - Lambdadynamodbaccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - dax:*
+                - application-autoscaling:DeleteScalingPolicy
+                - application-autoscaling:DeregisterScalableTarget
+                - application-autoscaling:DescribeScalableTargets
+                - application-autoscaling:DescribeScalingActivities
+                - application-autoscaling:DescribeScalingPolicies
+                - application-autoscaling:PutScalingPolicy
+                - application-autoscaling:RegisterScalableTarget
+                - cloudwatch:DeleteAlarms
+                - cloudwatch:DescribeAlarmHistory
+                - cloudwatch:DescribeAlarms
+                - cloudwatch:DescribeAlarmsForMetric
+                - cloudwatch:GetMetricStatistics
+                - cloudwatch:ListMetrics
+                - cloudwatch:PutMetricAlarm
+                - cloudwatch:GetMetricData
+                - datapipeline:ActivatePipeline
+                - datapipeline:CreatePipeline
+                - datapipeline:DeletePipeline
+                - datapipeline:DescribeObjects
+                - datapipeline:DescribePipelines
+                - datapipeline:GetPipelineDefinition
+                - datapipeline:ListPipelines
+                - datapipeline:PutPipelineDefinition
+                - datapipeline:QueryObjects
+                - iam:GetRole
+                - iam:ListRoles
+                - kms:DescribeKey
+                - kms:ListAliases
+                - sns:CreateTopic
+                - sns:DeleteTopic
+                - sns:ListSubscriptions
+                - sns:ListSubscriptionsByTopic
+                - sns:ListTopics
+                - sns:Subscribe
+                - sns:Unsubscribe
+                - sns:SetTopicAttributes
+                - lambda:CreateFunction
+                - lambda:ListFunctions
+                - lambda:ListEventSourceMappings
+                - lambda:CreateEventSourceMapping
+                - lambda:DeleteEventSourceMapping
+                - lambda:GetFunctionConfiguration
+                - lambda:DeleteFunction
+                - lambda:InvokeFunction
+                - lambda:InvokeAsync
+                - lambda:UpdateFunctionCode
+                - resource-groups:ListGroups
+                - resource-groups:ListGroupResources
+                - resource-groups:GetGroup
+                - resource-groups:GetGroupQuery
+                - resource-groups:DeleteGroup
+                - resource-groups:CreateGroup
+                - tag:GetResources
+                - kinesis:ListStreams
+                - kinesis:DescribeStream
+                - kinesis:DescribeStreamSummary
+                - kafka:DescribeCluster
+                - kafka:GetBootstrapBrokers
+              Resource: "*"
+            - Effect: Allow
+              Action: cloudwatch:GetInsightRuleReport
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: "*"
+              Condition:
+                StringLike:
+                  iam:PassedToService:
+                    - application-autoscaling.amazonaws.com
+                    - application-autoscaling.amazonaws.com.cn
+                    - dax.amazonaws.com
+            - Effect: Allow
+              Action:
+                - iam:CreateServiceLinkedRole
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  iam:AWSServiceName:
+                    - replication.dynamodb.amazonaws.com
+                    - dax.amazonaws.com
+                    - dynamodb.application-autoscaling.amazonaws.com
+                    - contributorinsights.dynamodb.amazonaws.com
+                    - kinesisreplication.dynamodb.amazonaws.com
+
+        #- PolicyName: TelematicsLambdalambdavpc
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - Lambdalambdavpc
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - "ec2:CreateNetworkInterface"
+                - "ec2:DescribeNetworkInterfaces"
+                - "ec2:DetachNetworkInterface"
+                - "ec2:DeleteNetworkInterface"
+                - "ec2:DescribeNetworkInterfaces"
+                - "ec2:AssignPrivateIpAddresses"
+                - "ec2:UnassignPrivateIpAddresses"
+                - "ec2:AttachNetworkInterface"
+                - "ec2:DescribeVpcs"
+                - "ec2:DescribeSubnets"
+                - "ec2:DescribeSecurityGroups"
+                - "logs:CreateLogGroup"
+                - "logs:CreateLogStream"
+                - "logs:PutLogEvents"
+              Resource: "*"
+        
+        #- PolicyName: TelematicsLambdaLocationServices
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - LambdaLocationServices
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'geo:ListMaps'
+                - 'geo:ListTrackers'
+                - 'geo:ListRouteCalculators'
+                - 'geo:ListGeofenceCollections'
+                - 'geo:ListPlaceIndexes'
+              Resource: "*"
+            
+            - Effect: Allow
+              Action: 'geo:*'
+              Resource: "*"
+        
+        #- PolicyName: TelematicsLambdasecretmanagerreadonly
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - Lambdasecretmanagerreadonly
+          PolicyDocument: 
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                  - 'secretsmanager:GetRandomPassword'
+                  - 'secretsmanager:GetResourcePolicy'
+                  - 'secretsmanager:UntagResource'
+                  - 'secretsmanager:DescribeSecret'
+                  - 'secretsmanager:ListSecretVersionIds'
+                  - 'secretsmanager:ListSecrets'
+                  - 'secretsmanager:TagResource'
+                Resource: "*"
+              - Effect: Allow
+                Action: "secretsmanager:GetRandomPassword"
+                Resource: "*"
+        
+        #- PolicyName: TelematicsLambdasesaccess
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - Lambdasesaccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - ses:*
+              Resource: "*"
+
+        #- PolicyName: TelematicsLambdasqsaccess
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - Lambdasqsaccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - sqs:*
+              Resource: "*"
+  
+  #-----------------------------------------------------------------------------
+  # This Role for EKS Cluster
+  #-----------------------------------------------------------------------------
+  
+  TelematicsEKSclusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      #RoleName: TelematicsEKSclusterRole
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - EKSclusterRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Role to provide access to EKS-Cluster
+      Policies:
+        - PolicyName: EmbeddedInlinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 'cloudformation:*'
+                Resource: '*'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+  
+  TelematicsEKSclusterElevates3Policy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Managed Policy to attach to EKS Cluster Role
+      #ManagedPolicyName: TelematicsgeofenceEKSclusterElevates3
+      ManagedPolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - geofenceEKSclusterElevates3
+      Path: /
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:ListStorageLensConfigurations'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:ListAllMyBuckets'
+              - 's3:ListJobs'
+              - 's3:ListBucketVersions'
+              - 's3:ListBucket'
+              - 's3:ListMultipartUploadParts'
+            Resource: '*'
+          - Effect: Allow
+            Action: 's3:*'
+            Resource:
+              - 'arn:aws:s3:::dev.elevate.artifacts'
+              - 'arn:aws:s3:::dev.elevate.feapp'
+              - 'arn:aws:s3:::dev.elevate.artifacts/*'
+              - 'arn:aws:s3:::dev.elevate.feapp/*'
+              - 'arn:aws:s3:::dev.elevateteledata'
+              - 'arn:aws:s3:::dev.elevateteledata/*'
+              - 'arn:aws:s3:::dev.telematics.inartifacts'
+              - 'arn:aws:s3:::dev.telematics.outartifacts'
+              - 'arn:aws:s3:::dev.telematics.inartifacts/*'
+              - 'arn:aws:s3:::dev.telematics.outartifacts/*'
+      Roles: 
+        - !Ref TelematicsEKSclusterRole
+
+  TelematicsEKSclusterElevateDynamodbPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Managed Policy to attach to EKScluster Role
+      #ManagedPolicyName: lambdaeksdynamodbaccess
+      ManagedPolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - lambdaaccesseksdynamodb
+      Path: /
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'dynamodb:List*'
+              - 'dynamodb:DescribeReservedCapacity*'
+              - 'dynamodb:DescribeLimits'
+              - 'dynamodb:DescribeTimeToLive'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'dynamodb:BatchGet*'
+              - 'dynamodb:DescribeStream'
+              - 'dynamodb:DescribeTable'
+              - 'dynamodb:Get*'
+              - 'dynamodb:Query'
+              - 'dynamodb:Scan'
+              - 'dynamodb:BatchWrite*'
+              - 'dynamodb:CreateTable'
+              - 'dynamodb:Update*'
+              - 'dynamodb:PutItem'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              #- 'dynamodb:*'
+              - 'dax:*'
+              - 'application-autoscaling:DeleteScalingPolicy'
+              - 'application-autoscaling:DeregisterScalableTarget'
+              - 'application-autoscaling:DescribeScalableTargets'
+              - 'application-autoscaling:DescribeScalingActivities'
+              - 'application-autoscaling:DescribeScalingPolicies'
+              - 'application-autoscaling:PutScalingPolicy'
+              - 'application-autoscaling:RegisterScalableTarget'
+              - 'cloudwatch:DeleteAlarms'
+              - 'cloudwatch:DescribeAlarmHistory'
+              - 'cloudwatch:DescribeAlarms'
+              - 'cloudwatch:DescribeAlarmsForMetric'
+              - 'cloudwatch:GetMetricStatistics'
+              - 'cloudwatch:ListMetrics'
+              - 'cloudwatch:PutMetricAlarm'
+              - 'cloudwatch:GetMetricData'
+              - 'datapipeline:ActivatePipeline'
+              - 'datapipeline:CreatePipeline'
+              - 'datapipeline:DeletePipeline'
+              - 'datapipeline:DescribeObjects'
+              - 'datapipeline:DescribePipelines'
+              - 'datapipeline:GetPipelineDefinition'
+              - 'datapipeline:ListPipelines'
+              - 'datapipeline:PutPipelineDefinition'
+              - 'datapipeline:QueryObjects'
+              - 'ec2:DescribeVpcs'
+              - 'ec2:DescribeSubnets'
+              - 'ec2:DescribeSecurityGroups'
+              - 'iam:GetRole'
+              - 'iam:ListRoles'
+              - 'kms:DescribeKey'
+              - 'kms:ListAliases'
+              - 'sns:CreateTopic'
+              - 'sns:DeleteTopic'
+              - 'sns:ListSubscriptions'
+              - 'sns:ListSubscriptionsByTopic'
+              - 'sns:ListTopics'
+              - 'sns:Subscribe'
+              - 'sns:Unsubscribe'
+              - 'sns:SetTopicAttributes'
+              - 'lambda:CreateFunction'
+              - 'lambda:ListFunctions'
+              - 'lambda:ListEventSourceMappings'
+              - 'lambda:CreateEventSourceMapping'
+              - 'lambda:DeleteEventSourceMapping'
+              - 'lambda:GetFunctionConfiguration'
+              - 'lambda:DeleteFunction'
+              - 'resource-groups:ListGroups'
+              - 'resource-groups:ListGroupResources'
+              - 'resource-groups:GetGroup'
+              - 'resource-groups:GetGroupQuery'
+              - 'resource-groups:DeleteGroup'
+              - 'resource-groups:CreateGroup'
+              - 'tag:GetResources'
+              - 'kinesis:ListStreams'
+              - 'kinesis:DescribeStream'
+              - 'kinesis:DescribeStreamSummary'
+            Resource: '*'
+          - Effect: Allow
+            Action: 'cloudwatch:GetInsightRuleReport'
+            Resource: 'arn:aws:cloudwatch:*:*:insight-rule/DynamoDBContributorInsights*'
+          - Effect: Allow
+            Action: 'iam:PassRole'
+            Resource: '*'
+            Condition:
+              StringLike:
+                iam:PassedToService:
+                  - 'application-autoscaling.amazonaws.com'
+                  - 'application-autoscaling.amazonaws.com.cn'
+                  - 'dax.amazonaws.com'
+          - Effect: Allow
+            Action: 'iam:CreateServiceLinkedRole'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName:
+                  - 'replication.dynamodb.amazonaws.com'
+                  - 'dax.amazonaws.com'
+                  - 'dynamodb.application-autoscaling.amazonaws.com'
+                  - 'contributorinsights.dynamodb.amazonaws.com'
+                  - 'kinesisreplication.dynamodb.amazonaws.com'
+      Roles: 
+        - !Ref TelematicsEKSclusterRole
+  
+  TelematicsEKSclusterSecretmanagerReadOnly:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Managed Policy to attach to EKScluster Role
+      #ManagedPolicyName: telematicsgeofenceDispatcherSecretmanagerReadOnly
+      ManagedPolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - geofenceDispatcherSecretmanagerReadOnly
+      Path: /
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'secretsmanager:GetRandomPassword'
+              - 'secretsmanager:GetResourcePolicy'
+              - 'secretsmanager:UntagResource'
+              - 'secretsmanager:GetSecretValue'
+              - 'secretsmanager:DescribeSecret'
+              - 'secretsmanager:ListSecretVersionIds'
+              - 'secretsmanager:ListSecrets'
+              - 'secretsmanager:TagResource'
+            Resource: '*'
+      Roles: 
+        - !Ref TelematicsEKSclusterRole
+  
+  TelematicsEKSclustercrossaccountpinpoint:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: 'sts:AssumeRole'
+            Resource: '*'
+      PolicyName: EKSclustercrossaccountpinpointpolicy
+      Roles: 
+        - !Ref TelematicsEKSclusterRole
+  
+  TelematicsEKSclusterEKSPolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'eks:ListClusters'
+              - 'eks:DescribeAddonVersions'
+              - 'eks:CreateCluster'
+            Resource: '*'
+          - Effect: Allow
+            Action: 'eks:*'
+            Resource: '*'
+      PolicyName: EKSclusterEKSPolicy
+      Roles: 
+        - !Ref TelematicsEKSclusterRole
+
+  #-----------------------------------------------------------------------------
+  # This Role for EKS Node Group
+  #-----------------------------------------------------------------------------
+  
+  TelematicsEKSNodeGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      #RoleName: TelematicsEKSNodeGroupRole
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - EKSNodeGroupRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Role to provide access to EKS-Node-Group
+      Policies:
+        - PolicyName: TelematicsEmbeddedInlinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'cloudformation:*'
+                  - 'secretsmanager:GetRandomPassword'
+                  - 'secretsmanager:GetResourcePolicy'
+                  - 'secretsmanager:UntagResource'
+                  - 'secretsmanager:GetSecretValue'
+                  - 'secretsmanager:DescribeSecret'
+                  - 'secretsmanager:ListSecretVersionIds'
+                  - 'secretsmanager:ListSecrets'
+                  - 'secretsmanager:TagResource'
+                Resource: '*'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+
+  TelematicsEKSNodeGroupDynamoDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Managed Policy to attach to EKS-NodeGroup Role
+      #ManagedPolicyName: Telematicsdynamodbaccessforeksnodegroup
+      ManagedPolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - dynamodbaccessforeksnodegroup
+      Path: /
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'dynamodb:*'
+            Resource: '*'
+          
+          - Effect: Allow
+            Action:
+              - 'dax:*'
+              - 'application-autoscaling:DeleteScalingPolicy'
+              - 'application-autoscaling:DeregisterScalableTarget'
+              - 'application-autoscaling:DescribeScalableTargets'
+              - 'application-autoscaling:DescribeScalingActivities'
+              - 'application-autoscaling:DescribeScalingPolicies'
+              - 'application-autoscaling:PutScalingPolicy'
+              - 'application-autoscaling:RegisterScalableTarget'
+              - 'datapipeline:ActivatePipeline'
+              - 'datapipeline:CreatePipeline'
+              - 'datapipeline:DeletePipeline'
+              - 'datapipeline:DescribeObjects'
+              - 'datapipeline:DescribePipelines'
+              - 'datapipeline:GetPipelineDefinition'
+              - 'datapipeline:ListPipelines'
+              - 'datapipeline:PutPipelineDefinition'
+              - 'datapipeline:QueryObjects'
+              - 'ec2:DescribeVpcs'
+              - 'ec2:DescribeSubnets'
+              - 'ec2:DescribeSecurityGroups'
+              - 'iam:GetRole'
+              - 'iam:ListRoles'
+              - 'kms:DescribeKey'
+              - 'kms:ListAliases'
+              - 'sns:CreateTopic'
+              - 'sns:DeleteTopic'
+              - 'sns:ListSubscriptions'
+              - 'sns:ListSubscriptionsByTopic'
+              - 'sns:ListTopics'
+              - 'sns:Subscribe'
+              - 'sns:Unsubscribe'
+              - 'sns:SetTopicAttributes'
+              - 'lambda:CreateFunction'
+              - 'lambda:ListFunctions'
+              - 'lambda:ListEventSourceMappings'
+              - 'lambda:CreateEventSourceMapping'
+              - 'lambda:DeleteEventSourceMapping'
+              - 'lambda:GetFunctionConfiguration'
+              - 'lambda:DeleteFunction'
+              - 'resource-groups:ListGroups'
+              - 'resource-groups:ListGroupResources'
+              - 'resource-groups:GetGroup'
+              - 'resource-groups:GetGroupQuery'
+              - 'resource-groups:DeleteGroup'
+              - 'resource-groups:CreateGroup'
+              - 'tag:GetResources'
+              - 'kinesis:ListStreams'
+              - 'kinesis:DescribeStream'
+              - 'kinesis:DescribeStreamSummary'
+            Resource: '*'
+          
+          - Effect: Allow
+            Action: 'cloudwatch:GetInsightRuleReport'
+            Resource: 'arn:aws:cloudwatch:*:*:insight-rule/DynamoDBContributorInsights*'
+          
+          - Effect: Allow
+            Action: 'iam:PassRole'
+            Resource: '*'
+            Condition:
+              StringLike:
+                iam:PassedToService:
+                  - 'application-autoscaling.amazonaws.com'
+                  - 'application-autoscaling.amazonaws.com.cn'
+                  - 'dax.amazonaws.com'
+          
+          - Effect: Allow
+            Action: 'iam:CreateServiceLinkedRole'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName:
+                  - 'replication.dynamodb.amazonaws.com'
+                  - 'dax.amazonaws.com'
+                  - 'dynamodb.application-autoscaling.amazonaws.com'
+                  - 'contributorinsights.dynamodb.amazonaws.com'
+                  - 'kinesisreplication.dynamodb.amazonaws.com'
+      Roles: 
+        - !Ref TelematicsEKSNodeGroupRole
+
+  TelematicsEKSNodeGroupMSKInlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'kafka-cluster:Connect'
+              - 'kafka-cluster:DescribeCluster'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'kafka-cluster:CreateTopic'
+              - 'kafka-cluster:WriteData'
+              - 'kafka-cluster:ReadData'
+              - 'kafka-cluster:DescribeTopic'
+            Resource: '*'
+      PolicyName: TelematicsMSKInlinePolicy
+      Roles: 
+        - !Ref TelematicsEKSNodeGroupRole
+  
+  TelematicsEKSNodeGrouppinpointSMSInlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'mobiletargeting:GetUserEndpoints'
+              - 'mobiletargeting:PutEvents'
+              - 'mobiletargeting:SendMessages'
+              - 'mobiletargeting:UpdateEndpoint'
+            Resource: '*'
+      PolicyName: TelematicspinpointSMSInlinePolicy
+      Roles: 
+        - !Ref TelematicsEKSNodeGroupRole
+  
+  TelematicsEKSNodeGrouppinpointSESInlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ses:SendEmail'
+              - 'ses:SendRawEmail'
+            Resource: '*'
+      #PolicyName: TelematicspinpointSESInlinePolicy
+      PolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - KinesisDataAnalyticsEmbeddedInlinePolicy
+      Roles: 
+        - !Ref TelematicsEKSNodeGroupRole
+
+  TelematicsEKSclusterNodegroupSecretmanagerReadOnly:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Managed Policy to attach to EKScluster Role
+      #ManagedPolicyName: telematicsgeofenceDispatcherSecretmanagerReadOnly
+      ManagedPolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - EKSClusterNodeGroupSecretmanagerReadOnly
+      Path: /
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'secretsmanager:GetRandomPassword'
+              - 'secretsmanager:GetResourcePolicy'
+              - 'secretsmanager:UntagResource'
+              - 'secretsmanager:GetSecretValue'
+              - 'secretsmanager:DescribeSecret'
+              - 'secretsmanager:ListSecretVersionIds'
+              - 'secretsmanager:ListSecrets'
+              - 'secretsmanager:TagResource'
+            Resource: '*'
+      Roles: 
+        - !Ref TelematicsEKSclusterRole
+
+  #-----------------------------------------------------------------------------
+  # This Role for Kinesis Data Analytics
+  #-----------------------------------------------------------------------------
+  
+  TelematicsKinesisDataAnalyticsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      #RoleName: TelematicsKinesisDataAnalyticsRole
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - KinesisDataAnalyticsRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - kinesisanalytics.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Role to provide access to Kinesis Data Analytics
+      Policies:
+        #- PolicyName: TelematicsKinesisDataAnalyticsEmbeddedInlinePolicy
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - KinesisDataAnalyticsEmbeddedInlinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                 - 'cloudformation:*'
+                 - 'kinesis:DescribeStream'
+                Resource: '*'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+      
+  TelematicsKinesisDataAnalyticsSQSpolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: 'sqs:*'
+            Resource: '*'
+      #PolicyName: TelematicsKinesisDataAnalyticsSQSpolicy
+      PolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - KinesisDataAnalyticsSQSpolicy
+      Roles: 
+        - !Ref TelematicsKinesisDataAnalyticsRole
+
+  TelematicsKinesisDataAnalyticsS3policy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'kinesisanalytics:*'
+              - 'kinesisvideo:*'
+              - 'iam:ListPolicyVersions'
+              - 'cloudwatch:*'
+              - 'firehose:*'
+              - 'logs:*'
+              - 'firehose:ListDeliveryStreams'
+              - 'iam:ListRoles'
+              - 'kinesis:*'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'iam:PassRole'
+            Resource: '*'
+      PolicyName: TelematicsKinesisDataAnalyticsS3policy
+      Roles: 
+        - !Ref TelematicsKinesisDataAnalyticsRole
+  
+  #-----------------------------------------------------------------------------
+  # This Role for Appsync
+  #-----------------------------------------------------------------------------
+  TelematicsAppsyncRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - appsync.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Role to provide access to appsync
+      Policies:
+        - PolicyName: EmbeddedInlinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 'cloudformation:*'
+                Resource: '*'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      RoleName:
+        'Fn::Join':
+            - '-'
+            - - Ref: Project
+              - geofence-Appsync-Role
+  
+  AppsyncInlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'dynamodb:BatchGetItem'
+              - 'dynamodb:ConditionCheckItem'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:DescribeContributorInsights'
+              - 'dynamodb:Scan'
+              - 'dynamodb:ListTagsOfResource'
+              - 'dynamodb:Query'
+              - 'dynamodb:DescribeStream'
+              - 'dynamodb:UpdateItem'
+              - 'dynamodb:DescribeTimeToLive'
+              - 'dynamodb:DescribeGlobalTableSettings'
+              - 'dynamodb:PartiQLSelect'
+              - 'dynamodb:DescribeTable'
+              - 'dynamodb:GetShardIterator'
+              - 'dynamodb:DescribeGlobalTable'
+              - 'dynamodb:GetItem'
+              - 'dynamodb:DescribeContinuousBackups'
+              - 'dynamodb:DescribeExport'
+              - 'dynamodb:DescribeKinesisStreamingDestination'
+              - 'dynamodb:DescribeBackup'
+              - 'dynamodb:GetRecords'
+              - 'dynamodb:DescribeTableReplicaAutoScaling'
+            Resource: '*'
+          
+          - Effect: Allow
+            Action:
+              - 'dynamodb:DescribeReservedCapacityOfferings'
+              - 'dynamodb:DescribeReservedCapacity'
+              - 'dynamodb:DescribeLimits'
+              - 'dynamodb:ListStreams'
+            Resource: '*'
+          
+      PolicyName: TelematicsDynamoInvokeInlinePolicy
+      Roles: 
+        - !Ref TelematicsAppsyncRole
+  
+  #-----------------------------------------------------------------------------
+  # This Role for Kinesis Data Firehose
+  #-----------------------------------------------------------------------------
+  
+  TelematicsKinesisDataFirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - KinesisDataFirehoseRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - firehose.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Role to provide access to Kinesis Data Firehose
+      Policies:
+        #- PolicyName: TelematicsKinesisDataFirehoseEmbeddedInlinePolicy
+        - PolicyName:
+            Fn::Join:
+              - '-'
+              - - Ref: Project
+                - KinesisDataFirehoseEmbeddedInlinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                 - 'cloudformation:*'
+                 - 'kinesis:DescribeStream'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 's3:AbortMultipartUpload'
+                  - 's3:GetBucketLocation'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                  - 's3:ListBucketMultipartUploads'
+                  - 's3:PutObject'
+                Resource:
+                  - 'arn:aws:s3:::dev.telematics.inartifacts'
+                  - 'arn:aws:s3:::dev.telematics.inartifacts/*'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+
+  TelematicsKinesisDataFirehosegluepolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: 'glue:GetTableVersions'
+            Resource: '*'
+      #PolicyName: TelematicsKinesisDataFirehosegluepolicy
+      PolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - KinesisDataFirehoseEmbeddedInlinePolicy
+      Roles: 
+        - !Ref TelematicsKinesisDataFirehoseRole
+
+  TelematicsKinesisDataFirehoseS3policy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'lambda:InvokeFunction'
+              - 'lambda:GetFunctionConfiguration'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'kms:Decrypt'
+            Resource: '*'
+          - Effect: Allow
+            Action: 'iam:PassRole'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'kinesis:DescribeStream'
+              - 'kinesis:GetShardIterator'
+              - 'kinesis:GetRecords'
+              - 'kinesis:ListShards'
+            Resource: '*'
+          - Effect: Allow
+            Action: 'iam:PassRole'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  - 'kinesis.us-east-1.amazonaws.com'
+              # StringLike:
+              #   kms:EncryptionContext:aws:kinesis:arn: "*"
+              #     - "arn:aws:kinesis:us-east-1:567234402044:stream/%FIREHOSE_STREAM_NAME%"
+      #PolicyName: TelematicsKinesisDataAnalyticsS3policy
+      PolicyName:
+        Fn::Join:
+          - '-'
+          - - Ref: Project
+            - KinesisDataFirehoseEmbeddedInlinePolicy
+      Roles: 
+        - !Ref TelematicsKinesisDataFirehoseRole
