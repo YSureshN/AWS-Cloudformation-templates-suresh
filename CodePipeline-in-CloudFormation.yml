@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Serverless Application that uses the ASP.NET Core framework running in Amazon Lambda.
+Parameters: {}
+Conditions: {}
+Resources:
+    AspNetCoreFunction:
+        Type: 'AWS::Serverless::Function'
+        Properties:
+            Handler: 'mySamLambda::mySamLambda.LambdaEntryPoint::FunctionHandlerAsync'
+            Runtime: dotnetcore3.1
+            CodeUri: ''
+            MemorySize: 256
+            Timeout: 30
+            Role: null
+            Policies:
+                - AWSLambdaFullAccess
+            Events:
+                ProxyResource:
+                    Type: Api
+                    Properties:
+                        Path: '/{proxy+}'
+                        Method: ANY
+                RootResource:
+                    Type: Api
+                    Properties:
+                        Path: /
+                        Method: ANY
+Outputs:
+    ApiURL:
+        Description: API endpoint URL for Prod environment
+        Value:
+            'Fn::Sub': 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
+# Omitted: KmsKey, IAM Roles etc
+# Inputs required: ProjectName, FullRepoId, GitHubBranch
+
+
+# An S3 bucket is needed to store the lambda zip file
+S3ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+    BucketName: !Sub "${ProjectName}-pipeline"
+    VersioningConfiguration:
+        Status: Enabled
+
+# This creates a GitHub connection. The Console will still need to be used to configure this. 
+GithubConnection:
+    Type: 'AWS::CodeStarConnections::Connection'
+    Properties:
+    ConnectionName: !Sub "${ProjectName}-connection"
+
+# The declaration of the how to build the project
+CodeBuild:
+    Type: AWS::CodeBuild::Project
+    DependsOn: [S3ArtifactBucket]
+    Properties:
+    Artifacts:
+        Type: CODEPIPELINE
+    Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+        - Name: S3_BUCKET
+        Value: !Ref S3ArtifactBucket
+        - Name: ProjectName
+        Value: !Ref ProjectName
+        Image: !Ref CodeBuildImage
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+    Name: !Sub "${ProjectName}-codebuild-build"
+    ServiceRole: !Ref CodeBuildRole
+    EncryptionKey: !Ref KMSKey
+    Source:
+        Type: CODEPIPELINE
+    Tags:
+        - Key: app-name
+        Value: !Ref ProjectName
+    TimeoutInMinutes: 5
+
+CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    DependsOn: [CodeBuild, GithubConnection]
+    Properties:
+    Name: !Sub "${ProjectName}-pipeline"
+    RoleArn: !Ref CodePipelineRole
+    RestartExecutionOnUpdate: true
+    Stages:
+    - Name: Source
+        Actions:
+        - InputArtifacts: []
+            ActionTypeId:
+            Version: '1'
+            Owner: AWS
+            Category: Source
+            Provider: CodeStarSourceConnection
+            OutputArtifacts:
+            - Name: !Sub "${ProjectName}-SourceArtifact"
+            RunOrder: 1
+            Configuration:
+            ConnectionArn: !Ref GithubConnection
+            FullRepositoryId: !Ref FullRepoId
+            BranchName: !Ref GitHubBranch
+            OutputArtifactFormat: "CODE_ZIP"
+            Name: get-source-code
+            RunOrder: 1
+    - Name: Build
+        Actions:
+        - Name: build-from-source
+        InputArtifacts:
+        - Name: !Sub "${ProjectName}-SourceArtifact"
+        OutputArtifacts:
+        - Name: !Sub "${ProjectName}-BuildArtifact"
+        ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: "1"
+            Provider: CodeBuild
+        Configuration:
+            ProjectName: !Ref CodeBuild
+        RunOrder: 1
+
+    - Name: DeployStaging
+        Actions:
+        - Name: create-changeset
+        InputArtifacts:
+        - Name: !Sub "${ProjectName}-BuildArtifact"
+        - Name: !Sub "${ProjectName}-SourceArtifact"
+        OutputArtifacts: []
+        ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Version: "1"
+            Provider: CloudFormation
+        Configuration:
+            StackName: !Sub "${ProjectName}-app-stack-staging"
+            ActionMode: CHANGE_SET_REPLACE
+            ChangeSetName: app-changeset-dev
+            Capabilities: CAPABILITY_NAMED_IAM
+            TemplatePath: !Sub "${ProjectName}-SourceArtifact::${SAMOutputFile}"
+            # TemplateConfiguration allows for a template file which can be used for many enviornments and better configuration 
+            TemplateConfiguration: !Sub "${ProjectName}-BuildArtifact::ci/params/staging.json"
+            RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-cloudformation-role"
+        RunOrder: 1
+        - Name: execute-changeset
+        InputArtifacts: []
+        OutputArtifacts: []
+        ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Version: "1"
+            Provider: CloudFormation
+        Configuration:
+            StackName: !Sub "${ProjectName}-app-stack-staging"
+            ActionMode: CHANGE_SET_EXECUTE
+            ChangeSetName: app-changeset-staging
+            RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-cloudformation-role"
+        RunOrder: 2
+
+    ArtifactStore:
+        Type: S3
+        Location: !Ref S3ArtifactBucket
+        EncryptionKey:
+        Id: !Ref KMSKey
+        Type: KMS
