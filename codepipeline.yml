@@ -1,0 +1,405 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: 'This solution allows you to create a AWS Codepipline for deploying a serverless application with AWS CodeBuild triggered by a Codecommit repo commit. The setup of this solution is fully automated via a CloudFormation template.'
+
+Parameters:
+  Environment:
+    AllowedValues:
+    - dev
+    - qa
+    - stg
+    - prod
+    Description: 'Environment'
+    Type: 'String'
+    Default: 'dev'
+
+  CodePipelineBucketPrefix:
+    Description: CodePipeline needs a utility bucket for its internal use. Specify a unique prefix for the bucket name
+    Type: String
+    Default: codepipelineartifacts
+
+  RepositoryName:
+    Type: String
+    Default: telematics.config
+    Description: Name of the CodeCommit repository
+  
+  ApiRepositoryName:
+    Type: String
+    Default: telematics.all.microservices.deployment
+    Description: Name of the CodeCommit repository
+  
+  BuildDockerImage:
+    Type: String
+    Default: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+    Description: Docker image to use for the build phase
+  
+  DeployDockerImage:
+    Type: String
+    Default: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+    Description: Docker image to use for the deployment phase
+
+#-----------------------------------------------------------------------------
+# Mappings
+#-----------------------------------------------------------------------------
+
+Mappings:
+  dev:
+    Layer:
+      "VpcId": "vpc-1081ac74"
+      "SubnetId1": "subnet-bc28a093"
+      "SubnetId2": "subnet-dd038785"
+      "SecurityGroup": "sg-9bad17e3"
+      "AWSClusterName": "dev-elevatetelematics-ms"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "BranchName": "dev"
+      
+  qa:
+    Layer:
+      "VpcId": "vpc-9ad5dafe"
+      "SubnetId1": "subnet-b0813a9a"
+      "SubnetId2": "subnet-86e163de"
+      "SecurityGroup": "sg-9ecb8fe6"
+      "AWSClusterName": "qa-elevatetelematics-ms"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "BranchName": "qa"
+      
+  stg:
+    Layer:
+      "VpcId": "vpc-a29785c6"
+      "SubnetId1": "subnet-fdf1bdc0"
+      "SubnetId2": "subnet-f54d3383"
+      "SecurityGroup": "sg-96aa31ee"
+      "AWSClusterName": "stg-elevatetelematics-ms"
+      "RawDataS3Bucket": "stg.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "stg.telematics.outartifacts"
+      "BranchName": "stg"
+      
+  prod:
+    Layer:
+      "VpcId": "vpc-e8ece28c"
+      "SubnetId1": "subnet-ca7e0bbc"
+      "SubnetId2": "subnet-939d27b9"
+      "SecurityGroup": "sg-96aa31ee"
+      "AWSClusterName": "prod-elevatetelematics-ms"
+      "RawDataS3Bucket": "stg.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "stg.telematics.outartifacts"
+      "BranchName": "prd"
+
+Resources:
+  
+  #-----------------------------------------------------------------------------
+  # AWS CodeBuild Project for EKS Configmap
+  #-----------------------------------------------------------------------------
+  
+  # This Buildproject for Dev-Deployment
+  EKSConfigmapDeploy:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name:
+        'Fn::Join':
+            - '-'
+            - - Ref: Environment
+              - TelemeticsConfigMapDeploy
+      Artifacts:
+        Type: CODEPIPELINE
+        EncryptionDisabled: true
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: AWS_CLUSTER_NAME
+            Type: PLAINTEXT
+            Value: !FindInMap [ !Ref "Environment", Layer, AWSClusterName ]
+          - Name: AWS_DEFAULT_REGION
+            Type: PLAINTEXT
+            Value: !Join [ "", [!Ref "AWS::Region"]]
+          - Name: AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Join [ "", [!Ref "AWS::AccountId"] ]
+          - Name: DOCKERHUB_PASSWORD
+            Type: SECRETS_MANAGER
+            Value: devdockerbuild:password
+          - Name: DOCKERHUB_USERNAME
+            Type: SECRETS_MANAGER
+            Value: devdockerbuild:username
+          - Name: TELEMATICS_DB_DEV
+            Type: SECRETS_MANAGER
+            Value: telematics/elevate:dev
+          - Name: TELEMATICS_DB_QA
+            Type: SECRETS_MANAGER
+            Value: telematics/elevate:qa
+        Image: !Ref DeployDockerImage
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-CodebuildIAMRole
+      #ServiceRole: arn:aws:iam::567234402044:role/CodeBuild_S3
+      TimeoutInMinutes: 10
+      VpcConfig:
+        VpcId: !FindInMap [ !Ref "Environment", Layer, VpcId ]
+        Subnets:
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId1 ]
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId2 ]
+        SecurityGroupIds:
+          - !FindInMap [ !Ref "Environment", Layer, SecurityGroup ]
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec:
+          'Fn::Join':
+            - '-'
+            - - Ref: Environment
+              - Configmap.yml
+  
+  #-----------------------------------------------------------------------------
+  # AWS CodePipeline Pipeline for EKS Configmap Creating
+  #-----------------------------------------------------------------------------
+  
+  Pipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      #Name: !Join [ "", ["Telemetic-Pipeline", "-", !Ref 'AWS::StackName'] ]
+      Name: 
+        'Fn::Join':
+            - '-'
+            - - Ref: Environment
+              - telematics.configmap.pipeline
+      Tags: 
+        - Key: "Environment"
+          Value: 
+              Ref: Environment         
+        - Key: "ResourceType"
+          Value: "AWS CodePipeline"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telematics.configmap.pipeline
+      ArtifactStore:
+        #Location: !Ref PipelineS3Bucket
+        Location:
+          'Fn::Join':
+                - '.'
+                - - Ref: Environment
+                  - telematics.inartifacts
+        Type: S3
+      RestartExecutionOnUpdate: true
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-CodepipelineIAMRole
+      #RoleArn: arn:aws:iam::567234402044:role/AWS-CodePipeline-Service
+      Stages:
+
+        # Stage 1:  Get the source from Codecommit:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: 1
+              Configuration:
+                RepositoryName: !Ref RepositoryName
+                BranchName: !FindInMap [ !Ref "Environment", Layer, BranchName ]
+              OutputArtifacts:
+                - Name: TheSourceCode
+        
+        # Stage 2:  Build to Qa Deploy Manual Approval
+        - Actions:
+            - ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                NotificationArn: arn:aws:sns:us-east-1:567234402044:ApprovalRequestNotification
+              InputArtifacts: []
+              Name: TestApproval
+              RunOrder: 1
+          Name:
+            'Fn::Join':
+                - '-'
+                - - Ref: Environment
+                  - Deployment_Approval
+        
+        # Stage 3:  Build using for deploy in Dev Environment
+        - Name: DevDeploy
+          Actions:
+            - Name:
+                'Fn::Join':
+                    - '-'
+                    - - Ref: Environment
+                      - Deploy
+              RunOrder: 1
+              InputArtifacts:
+                - Name: TheSourceCode
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName:  !Ref EKSConfigmapDeploy
+              OutputArtifacts:
+                - Name: TheArtifact
+
+  #-----------------------------------------------------------------------------
+  # AWS CodeBuild Project for EKS API Deployment Env wise
+  #-----------------------------------------------------------------------------
+  
+  # This Buildproject for Dev-Deployment
+  EKSAPIDeploy:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name:
+        'Fn::Join':
+            - '-'
+            - - Ref: Environment
+              - TelemeticsAPIDeploy
+      Artifacts:
+        Type: CODEPIPELINE
+        EncryptionDisabled: true
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: AWS_CLUSTER_NAME
+            Type: PLAINTEXT
+            Value: !FindInMap [ !Ref "Environment", Layer, AWSClusterName ]
+          - Name: AWS_DEFAULT_REGION
+            Type: PLAINTEXT
+            Value: !Join [ "", [!Ref "AWS::Region"]]
+          - Name: AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Join [ "", [!Ref "AWS::AccountId"] ]
+          - Name: DOCKERHUB_PASSWORD
+            Type: SECRETS_MANAGER
+            Value: devdockerbuild:password
+          - Name: DOCKERHUB_USERNAME
+            Type: SECRETS_MANAGER
+            Value: devdockerbuild:username
+          - Name: TELEMATICS_DB_DEV
+            Type: SECRETS_MANAGER
+            Value: telematics/elevate:dev
+          - Name: TELEMATICS_DB_QA
+            Type: SECRETS_MANAGER
+            Value: telematics/elevate:qa
+        Image: !Ref DeployDockerImage
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-CodebuildIAMRole
+      #ServiceRole: arn:aws:iam::567234402044:role/CodeBuild_S3
+      TimeoutInMinutes: 10
+      VpcConfig:
+        VpcId: !FindInMap [ !Ref "Environment", Layer, VpcId ]
+        Subnets:
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId1 ]
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId2 ]
+        SecurityGroupIds:
+          - !FindInMap [ !Ref "Environment", Layer, SecurityGroup ]
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec:
+          'Fn::Join':
+            - '_'
+            - - Ref: Environment
+              - buildspec.yaml
+  
+  #-----------------------------------------------------------------------------
+  # AWS CodePipeline Pipeline for EKS API Pipeline
+  #-----------------------------------------------------------------------------
+  
+  ApiPipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      #Name: !Join [ "", ["Telemetic-Pipeline", "-", !Ref 'AWS::StackName'] ]
+      Name: 
+        'Fn::Join':
+            - '-'
+            - - Ref: Environment
+              - telematics.microservices.api-deployment
+      Tags: 
+        - Key: "Environment"
+          Value: 
+              Ref: Environment         
+        - Key: "ResourceType"
+          Value: "AWS CodePipeline"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telematics.microservices.api-deployment
+      ArtifactStore:
+        #Location: !Ref PipelineS3Bucket
+        Location:
+          'Fn::Join':
+                - '.'
+                - - Ref: Environment
+                  - telematics.inartifacts
+        Type: S3
+      RestartExecutionOnUpdate: true
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-CodepipelineIAMRole
+      #RoleArn: arn:aws:iam::567234402044:role/AWS-CodePipeline-Service
+      Stages:
+
+        # Stage 1:  Get the source from Codecommit:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: 1
+              Configuration:
+                RepositoryName: !Ref ApiRepositoryName
+                BranchName: !FindInMap [ !Ref "Environment", Layer, BranchName ]
+              OutputArtifacts:
+                - Name: TheSourceCode
+        
+        # Stage 2:  Build to Qa Deploy Manual Approval
+        - Actions:
+            - ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                NotificationArn: arn:aws:sns:us-east-1:567234402044:ApprovalRequestNotification
+              InputArtifacts: []
+              Name: TestApproval
+              RunOrder: 1
+          Name:
+            'Fn::Join':
+                - '-'
+                - - Ref: Environment
+                  - Deployment_Approval
+        
+        # Stage 3:  Build using for deploy in Dev Environment
+        - Name: DevDeploy
+          Actions:
+            - Name:
+                'Fn::Join':
+                    - '-'
+                    - - Ref: Environment
+                      - Deploy
+              RunOrder: 1
+              InputArtifacts:
+                - Name: TheSourceCode
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName:  !Ref EKSAPIDeploy
+              OutputArtifacts:
+                - Name: TheArtifact
+        
