@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This AWS CloudFormation Template is for telematics.relatime.alerts Kinesis
+  Data Analytics application
+Parameters:
+  Environment:
+    Description: 'Environment: dev,qa,stg,prod'
+    Type: String
+    Default: dev
+    AllowedValues:
+    - dev
+    - qa
+    - stg
+    - prod
+    ConstraintDescription: must be either 'dev','qa','stg' or 'prod'
+Mappings:
+  dev:
+    Layer:
+      VpcId: vpc-1081ac74
+      SubnetId1: subnet-dd038785
+      SubnetId2: subnet-bc28a093
+      SecurityGroupID: sg-9bad17e3
+      PubSubnetId1: subnet-a04ee1f8
+      PubSubnetId2: subnet-191faa33
+      RawDataS3Bucket: dev.telematics.inartifacts
+      ProcessedDataS3Bucket: dev.telematics.outartifacts
+      RetentionInDays: '7'
+      ConnectionString: '{{resolve:secretsmanager:telematics/elevate:SecretString:dev}}'
+  qa:
+    Layer:
+      VpcId: vpc-9ad5dafe
+      SubnetId1: subnet-86e163de
+      SubnetId2: subnet-b0813a9a
+      SecurityGroupID: sg-9ecb8fe6
+      PubSubnetId1: subnet-a6e062fe
+      PubSubnetId2: subnet-2482390e
+      RawDataS3Bucket: dev.telematics.inartifacts
+      ProcessedDataS3Bucket: dev.telematics.outartifacts
+      RetentionInDays: '7'
+      ConnectionString: '{{resolve:secretsmanager:telematics/elevate:SecretString:qa}}'
+  stg:
+    Layer:
+      VpcId: vpc-a29785c6
+      SubnetId1: subnet-fdf1bdc0
+      SubnetId2: subnet-f54d3383
+      SecurityGroupID: sg-9bad17e3
+      PubSubnetId1: subnet-024f3174
+      PubSubnetId2: subnet-85f0bcb8
+      RawDataS3Bucket: dev.telematics.inartifacts
+      ProcessedDataS3Bucket: dev.telematics.outartifacts
+      RetentionInDays: '14'
+      ConnectionString: '{{resolve:secretsmanager:telematics/elevate:SecretString:stg}}'
+  prod:
+    Layer:
+      VpcId: vpc-e8ece28c
+      SubnetId1: subnet-ca7e0bbc
+      SubnetId2: subnet-939d27b9
+      SecurityGroupID: sg-9bad17e3
+      PubSubnetId1: subnet-cb7e0bbd
+      PubSubnetId2: subnet-0ece4356
+      RawDataS3Bucket: dev.telematics.inartifacts
+      ProcessedDataS3Bucket: dev.telematics.outartifacts
+      RetentionInDays: '30'
+      ConnectionString: '{{resolve:secretsmanager:telematics/elevate:SecretString:prod}}'
+Resources:
+  KineissAnalyticsApplication:
+    Type: AWS::KinesisAnalyticsV2::Application
+    Properties:
+      RuntimeEnvironment: FLINK-1_11
+      ServiceExecutionRole:
+        Fn::GetAtt:
+        - KinesisAnalyticsApplicationRole
+        - Arn
+      ApplicationConfiguration:
+        ApplicationCodeConfiguration:
+          CodeContent:
+            S3ContentLocation:
+              BucketARN: arn:aws:s3:::dev.elevateteledata
+              FileKey: kinesis-to-timestream-16.0.jar
+          CodeContentType: ZIPFILE
+  KinesisAnalyticsApplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: kinesisanalytics.amazonaws.com
+          Action: sts:AssumeRole
+      RoleName:
+        Fn::Join:
+        - '-'
+        - - Ref: Environment
+          - kinesis_analytics_application_role
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+      - arn:aws:iam::aws:policy/AmazonTimestreamFullAccess
+  KinesistoS3InlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName:
+        Fn::Join:
+        - '-'
+        - - Ref: Environment
+          - kinesisAnalyticsApptos3
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:AbortMultipartUpload
+          - s3:GetBucketLocation
+          - s3:GetObject
+          - s3:ListBucket
+          - s3:ListBucketMultipartUploads
+          - s3:PutObject
+          Resource:
+          - arn:aws:s3:::dev.elevateteledata
+          - arn:aws:s3:::dev.elevateteledata/*
+        - Effect: Allow
+          Action:
+          - kinesisanalytics:*
+          - kinesisvideo:*
+          - iam:ListPolicyVersions
+          - cloudwatch:*
+          - firehose:*
+          - logs:*
+          - firehose:ListDeliveryStreams
+          - iam:ListRoles
+          - kinesis:*
+          Resource: '*'
+        - Effect: Allow
+          Action: iam:PassRole
+          Resource: arn:aws:iam::567234402044:role/firehose_s3
+        - Effect: Allow
+          Action: iam:PassRole
+          Resource: '*'
+      Roles:
+      - Ref: KinesisAnalyticsApplicationRole
