@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: An AWS Lambda application.
+Parameters:
+  Environment:
+    Description: 'Environment: dev,qa,stg,prod' 
+    Type: String
+    Default: 'qa'
+    AllowedValues:
+      - dev
+      - qa
+      - stg
+      - prod
+    ConstraintDescription: must be either 'dev','qa','stg' or 'prod'
+
+  S3BucketName:
+    Description: The S3 bucket that contains the application code.
+    Type: String
+    Default: 'dev.telematics.inartifacts'
+
+  S3BucketKey:
+    Description: The S3 bucket that contains the application code.
+    Type: String
+    Default: 'lambda_function/dynamostream-to-cache-lambda/telematics.dynamostream-latest.jar'
+  
+  ReadCapacityUnits:
+    Description: Provisioned read throughput
+    Type: Number
+    Default: '1'
+    MinValue: '1'
+    MaxValue: '10'
+    ConstraintDescription: must be between 1 and 10
+  
+  WriteCapacityUnits:
+    Description: Provisioned write throughput
+    Type: Number
+    Default: '1'
+    MinValue: '1'
+    MaxValue: '10'
+    ConstraintDescription: must be between 1 and 10
+
+  
+Mappings:
+  dev:
+    Layer:
+      "VpcId": "vpc-1081ac74"
+      "SubnetId1": "subnet-dd038785"
+      "SubnetId2": "subnet-bc28a093"
+      "SecurityGroupID": "sg-9bad17e3" # need to add sg-96aa31ee
+      "PubSubnetId1": "subnet-a04ee1f8"
+      "PubSubnetId2": "subnet-191faa33"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "7"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:dev}}"
+      "secretsmanager": "   telematics/rdsaccess"
+      "SecretString": "dev"
+            
+  qa:
+    Layer:
+      "VpcId": "vpc-9ad5dafe"
+      "SubnetId1": "subnet-86e163de"
+      "SubnetId2": "subnet-b0813a9a"
+      "SecurityGroupID": "sg-9ecb8fe6"
+      "PubSubnetId1": "subnet-a6e062fe"
+      "PubSubnetId2": "subnet-2482390e"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "7"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:qa}}"
+      "secretsmanager": "telematics/qardsaccess"
+      "SecretString": "qa"
+
+  stg:
+    Layer:
+      "VpcId": "vpc-a29785c6"
+      "SubnetId1": "subnet-fdf1bdc0"
+      "SubnetId2": "subnet-f54d3383"
+      "SecurityGroupID": "sg-9bad17e3"
+      "PubSubnetId1": "subnet-024f3174"
+      "PubSubnetId2": "subnet-85f0bcb8"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "14"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:stg}}"
+      "secretsmanager": "telematics/stgrdsaccess"
+      "SecretString": "stg"
+
+  prod:
+    Layer:
+      "VpcId": "vpc-e8ece28c"
+      "SubnetId1": "subnet-ca7e0bbc"
+      "SubnetId2": "subnet-939d27b9"
+      "SecurityGroupID": "sg-9bad17e3"
+      "PubSubnetId1": "subnet-cb7e0bbd"
+      "PubSubnetId2": "subnet-0ece4356"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "30"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:prod}}"
+      "secretsmanager": "telematics/prodrdsaccess"
+      "SecretString": "prod"
+
+Resources:
+
+  #-----------------------------------------------------------------------------
+  # This lambda for creation of all services including Lambda
+  #-----------------------------------------------------------------------------
+
+  DynamoStreamtocache:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - DynamoStream_to_cache1
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Lambda"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - DynamoStream_to_cache
+      TracingConfig:
+        Mode: Active
+      Handler: herc.telematics.alert.threshold.handlers.ProcessDynamodbRecords::handleRequest
+      Code:
+        S3Bucket: 
+          Ref: S3BucketName # dev.telematics.inartifacts
+        S3Key: 
+          Ref: S3BucketKey # lambda_function/mac-eligible-equipment-0.0.1-SNAPSHOT.jar
+      Environment:
+        Variables:
+          QUEUE_NAME:
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - DynamoStream_to_cache
+          awsRegion: us-east-1
+          secretName: !FindInMap [ !Ref "Environment", Layer, secretsmanager ]
+          # ConnectionString: '{{resolve:secretsmanager:telematics/elevate:SecretString:qa}}'
+      Runtime: java11
+      Description: Java function
+      MemorySize: 512
+      Timeout: 300
+      VpcConfig:
+        SubnetIds:
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId1 ]
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId2 ]
+        SecurityGroupIds: 
+          - !FindInMap [ !Ref "Environment", Layer, SecurityGroupID ]
+      #Role: !GetAtt GeofenceDispatcherRole.Arn
+      #Role: !Sub arn:aws:iam::${AWS::AccountId}:role/Lambda_RDS_FullAccess
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-LambdaAccessRole
+  
+  #-----------------------------------------------------------------------------
+  # This Lambda Function for Geofence Dispatcher Log Grop
+  #-----------------------------------------------------------------------------
+  
+  DynamoStreamtocacheLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${DynamoStreamtocache}"
+      RetentionInDays: 30
+
+  #-----------------------------------------------------------------------------
+  # This function for DynamoDB Creating with AutoScaling based on 70%
+  #-----------------------------------------------------------------------------
+  
+  DynamoDBTable1:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Join:
+          - '-'
+          - - Ref: Environment
+            - AlertPreference1
+      BillingMode: PROVISIONED
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: PreferenceID
+          AttributeType: S
+        - AttributeName: AccountNumber
+          AttributeType: S
+        - AttributeName: DivisionCode
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PreferenceID
+          KeyType: HASH
+
+      ProvisionedThroughput:
+          ReadCapacityUnits: !Ref 'ReadCapacityUnits'
+          WriteCapacityUnits: !Ref 'WriteCapacityUnits'
+      GlobalSecondaryIndexes:
+      - IndexName: AccountNumber-DivisionCode-Index
+        KeySchema:
+        - AttributeName: AccountNumber
+          KeyType: HASH
+        - AttributeName: DivisionCode
+          KeyType: RANGE
+        Projection:
+          ProjectionType: "ALL"
+        ProvisionedThroughput: 
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+      Tags:
+        - Key: Environment
+          Value:
+            Ref: Environment
+        - Key: ResourceType
+          Value: DynamoDB Table
+        - Key: CostCenter
+          Value: '9038'
+        - Key: Application
+          Value: Elevate-Telematics
+        - Key: ITOwner
+          Value: Sunil Gupta
+        - Key: Name
+          Value:
+            Fn::Join:
+              - '-'
+              - - Ref: Environment
+                - AlertPreference1
+
+  WriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 10
+      MinCapacity: 1
+      ResourceId: !Join
+        - /
+        - - table
+          - !Ref DynamoDBTable1
+      RoleARN:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable
+      ScalableDimension: dynamodb:table:WriteCapacityUnits
+      ServiceNamespace: dynamodb
+  WriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref WriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  ReadCapacityScalableTarget: 
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties: 
+      MaxCapacity: 10
+      MinCapacity: 1
+      ResourceId: !Join
+        - /
+        - - table
+          - !Ref DynamoDBTable1
+      RoleARN:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable
+      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+    DependsOn: DynamoDBTable1
+  
+  ReadScalingPolicy: 
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties: 
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: 
+        Ref: ReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration: 
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification: 
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+  
+  #-----------------------------------------------------------------------------
+  # This Function for Integrating Lambda with DynamoDB
+  #-----------------------------------------------------------------------------
+  
+  EventSourceMappingDynamoStreamtocache:
+    Type: AWS::Lambda::EventSourceMapping
+    DependsOn: DynamoDBTable1
+    Properties:
+      #FunctionName: !Ref DynamoStreamtocache
+      BatchSize: 1
+      StartingPosition : LATEST
+      EventSourceArn: !GetAtt DynamoDBTable1.StreamArn
+      FunctionName:
+        Fn::GetAtt:
+          - "DynamoStreamtocache"
+          - "Arn"
+
+Outputs:
+  TableStreamArn:
+    Value: !GetAtt DynamoDBTable1.StreamArn
