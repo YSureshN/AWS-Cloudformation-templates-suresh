@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This AWS CloudFormation Template is for Herc Rentals Timestream Database and Tables'
+
+#-----------------------------------------------------------------------------
+# Parameters
+#-----------------------------------------------------------------------------
+
+Parameters:
+  
+  Environment:
+    Description: 'Environment: dev,qa,stg,prod'
+    Type: String
+    Default: "qa"
+    AllowedValues:
+    - dev
+    - qa
+    - stg
+    - prod
+    ConstraintDescription: must be either 'dev','qa','stg' or 'prod'
+
+Resources:
+  
+  #-----------------------------------------------------------------------------
+  # This Function for AWS SNS Topic
+  #-----------------------------------------------------------------------------
+  
+  SNSTopicEmail:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      Subscription:
+        - Endpoint: "venkthota@deloitte.com" # PUT EMAIL id's of the members whom to wanto receive the email
+          Protocol: "email"
+      TopicName: 
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - telematics-backend-SNStopic
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "SNS topic"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telematics-backend-SNStopic
+                
+  
+  #-----------------------------------------------------------------------------
+  # This Function for AWS Timestream Database
+  #-----------------------------------------------------------------------------
+  
+  TelematicsAWSTimestreamDatabase:
+    Type: AWS::Timestream::Database
+    Properties: 
+      DatabaseName:
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - telematics-timestream
+      #KmsKeyId: 
+       # minLength: 1
+       # maxLength: 2048
+      
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Timestream Database"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telematics-timestream
+  
+  #-----------------------------------------------------------------------------
+  # This Function for AWS Timestream Table
+  #-----------------------------------------------------------------------------
+  
+  TelematicsAWSTimestreamTable1:
+    Type: AWS::Timestream::Table
+    DependsOn: "TelematicsAWSTimestreamDatabase"
+    Properties:
+      TableName: "DeviceData"
+      DatabaseName: !Ref TelematicsAWSTimestreamDatabase
+      RetentionProperties:
+        MemoryStoreRetentionPeriodInHours: "24"
+        MagneticStoreRetentionPeriodInDays: "30"
+      
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Timestream Table"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - DeviceData
+
+  TelematicsAWSTimestreamTable2:
+    Type: AWS::Timestream::Table
+    DependsOn: "TelematicsAWSTimestreamDatabase"
+    Properties:
+      TableName: "DeviceMessageData"
+      DatabaseName: !Ref TelematicsAWSTimestreamDatabase
+      RetentionProperties:
+        MemoryStoreRetentionPeriodInHours: "24"
+        MagneticStoreRetentionPeriodInDays: "30"
+      
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Timestream Table"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - DeviceMessageData
+
+  TelematicsAWSTimestreamTable3:
+    Type: AWS::Timestream::Table
+    DependsOn: "TelematicsAWSTimestreamDatabase"
+    Properties:
+      TableName: "Devices"
+      DatabaseName: !Ref TelematicsAWSTimestreamDatabase
+      RetentionProperties:
+        MemoryStoreRetentionPeriodInHours: "24"
+        MagneticStoreRetentionPeriodInDays: "30"
+      
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Timestream Table"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - Devices                
