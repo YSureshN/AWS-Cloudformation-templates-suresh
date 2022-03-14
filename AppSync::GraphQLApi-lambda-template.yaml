@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: An AWS Lambda application.
+Parameters:
+  Environment:
+    Description: 'Environment: dev,qa,stg,prod' 
+    Type: String
+    Default: 'qa'
+    AllowedValues:
+      - dev
+      - qa
+      - stg
+      - prod
+    ConstraintDescription: must be either 'dev','qa','stg' or 'prod'
+
+  S3BucketName:
+    Description: The S3 bucket that contains the application code.
+    Type: String
+    Default: 'dev.telematics.inartifacts'
+
+  S3BucketKey:
+    Description: The S3 bucket that contains the application code.
+    Type: String
+    Default: 'lambda_function/herc.telematics.customname-0.0.1-SNAPSHOT.jar'
+
+  
+Mappings:
+  dev:
+    Layer:
+      "VpcId": "vpc-1081ac74"
+      "SubnetId1": "subnet-dd038785"
+      "SubnetId2": "subnet-bc28a093"
+      "SecurityGroupID": "sg-9bad17e3" # need to add sg-96aa31ee
+      "PubSubnetId1": "subnet-a04ee1f8"
+      "PubSubnetId2": "subnet-191faa33"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "7"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:dev}}"
+      "secretsmanager": "telematics/elevate"
+      "SecretString": "dev"
+            
+  qa:
+    Layer:
+      "VpcId": "vpc-9ad5dafe"
+      "SubnetId1": "subnet-86e163de"
+      "SubnetId2": "subnet-b0813a9a"
+      "SecurityGroupID": "sg-9ecb8fe6"
+      "PubSubnetId1": "subnet-a6e062fe"
+      "PubSubnetId2": "subnet-2482390e"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "7"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:qa}}"
+      "secretsmanager": "telematics/elevate"
+      "SecretString": "qa"
+
+  stg:
+    Layer:
+      "VpcId": "vpc-a29785c6"
+      "SubnetId1": "subnet-fdf1bdc0"
+      "SubnetId2": "subnet-f54d3383"
+      "SecurityGroupID": "sg-9bad17e3"
+      "PubSubnetId1": "subnet-024f3174"
+      "PubSubnetId2": "subnet-85f0bcb8"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "14"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:stg}}"
+      "secretsmanager": "telematics/elevate"
+      "SecretString": "stg"
+
+  prod:
+    Layer:
+      "VpcId": "vpc-e8ece28c"
+      "SubnetId1": "subnet-ca7e0bbc"
+      "SubnetId2": "subnet-939d27b9"
+      "SecurityGroupID": "sg-9bad17e3"
+      "PubSubnetId1": "subnet-cb7e0bbd"
+      "PubSubnetId2": "subnet-0ece4356"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "30"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:prod}}"
+      "secretsmanager": "telematics/elevate"
+      "SecretString": "prod"
+
+Resources:
+  function:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - telematics-custom-equipment-name1
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Lambda"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telematics-custom-equipment-name1
+      TracingConfig:
+        Mode: Active
+      Handler: herc.telematics.customname.handler.EquipmentHandler::handleRequest
+      Code:
+        S3Bucket: 
+          Ref: S3BucketName
+        S3Key: 
+          Ref: S3BucketKey
+      Environment:
+        Variables:
+          Environment: !FindInMap [ !Ref "Environment", Layer, SecretString ]
+          Secretname: !FindInMap [ !Ref "Environment", Layer, secretsmanager ]
+      Runtime: java11
+      Description: Java function
+      MemorySize: 512
+      Timeout: 30
+      VpcConfig:
+        SubnetIds:
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId1 ]
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId2 ]
+        SecurityGroupIds: 
+          - !FindInMap [ !Ref "Environment", Layer, SecurityGroupID ]
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-LambdaAccessRole
+      #Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LambdaFunctionRole
+    
+  GraphQLApi:
+    Type: AWS::AppSync::GraphQLApi
+    Properties:
+      AuthenticationType: API_KEY
+      Name: 
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - telematics-custom-equipment-name1
+      Tags: 
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Environment"
+          Value: 
+            Ref: Environment
+        - Key: "ResourceType"
+          Value: "AppSync"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telematics-custom-equipment-name1
+
+  AppSyncApiKey:
+    Type: AWS::AppSync::ApiKey
+    Properties:
+      ApiId: !GetAtt [GraphQLApi, ApiId]
+      Description: "save custom equipment name" 
+      Expires: 1672481021
+      
+  LambdaAsDatasource:      
+    Type: "AWS::AppSync::DataSource"
+    Properties:
+      ApiId: !GetAtt [GraphQLApi, ApiId]
+      Type: AWS_LAMBDA
+      Name: EquipmentCustomName1
+      Description: "triggering the Save Custom equipment name"
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt function.Arn 
+      ServiceRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/Appysync_DynamodbInvoke
+      
+  QueryGetPostResolver:
+    Type: "AWS::AppSync::Resolver"
+    DependsOn: Schema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: "Mutation"
+      FieldName: "saveCustomEquipmentName"
+      DataSourceName: !GetAtt LambdaAsDatasource.Name
+      RequestMappingTemplate: |
+               { 
+               
+                  "version" : "2017-02-28", 
+                  "operation": "Invoke", 
+                  "payload": $util.toJson($context.args)
+               } 
+      ResponseMappingTemplate: |
+                  #if( $context.result && $context.result.errorMessage )
+                    $utils.error($context.result.errorMessage, $context.result.errorType)
+                  #else
+                    $utils.toJson($context.result)
+                  #end        
+              
+
+  Schema:
+    Type: "AWS::AppSync::GraphQLSchema"
+    Properties:
+      ApiId: !GetAtt [GraphQLApi, ApiId]
+      Definition: |
+        schema {
+            query: Query
+            mutation: Mutation
+        }
+
+        type EquipmentCustomName {
+            contractNumber: String
+            customEquipmentName: String
+            customerNumber: String
+            errorMessage: String
+            errorType: String
+            icNumber: String
+        }
+
+        type Mutation {
+            saveCustomEquipmentName(equipmentCustomNameRequestList: [EquipmentCustomNames]): [EquipmentCustomName]
+            updateCustomEquipmentName(customEquipmentName: String!, customerNumber: String!, icNumber: String!): EquipmentCustomName
+        }
+
+        type Query {
+            getEquipmentSummary(id: Int!): EquipmentCustomName
+        }  
+
+        input EquipmentCustomNames {
+            contractNumber: String
+            customEquipmentName: String!
+            customerNumber: String!
+            icNumber: String!
+        }  
+
+Outputs:
+  GraphQLApiEndpoint:
+    Description: The URL to the GraphQL Endpoint
+    Value: !GetAtt GraphQLApi.GraphQLUrl
+  GraphQLApiId:
+    Description: The API ID of the GraphQL API
+    Value: !GetAtt GraphQLApi.ApiId
