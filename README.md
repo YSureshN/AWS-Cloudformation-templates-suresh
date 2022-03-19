@@ -29,3 +29,8 @@ Producer:
 
 Consumer:
 ./kafka-console-consumer.sh --bootstrap-server BootstrapBrokerStringTls --consumer.config client.properties --topic AWSKafkaTutorialTopic --from-beginning
+
+
+==================
+AWS Cloudformation for all Services with YAML
+https://github.com/YSureshN/aws-cloudformation-templates/tree/aws-cli-macro/aws/services
