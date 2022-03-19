@@ -34,3 +34,10 @@ Consumer:
 ==================
 AWS Cloudformation for all Services with YAML
 https://github.com/YSureshN/aws-cloudformation-templates/tree/aws-cli-macro/aws/services
+
+AWS Cloudformation for Pinpoint
+
+https://github.com/gojko/cloudformation-pinpoint
+
+AWS Cloudformation for VPN
+https://github.com/aws-samples/aws-ncsc-vpn-configurations
