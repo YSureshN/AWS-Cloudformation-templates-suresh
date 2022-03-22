@@ -1,4 +1,6 @@
 # https://aws.amazon.com/blogs/compute/introducing-cross-account-amazon-ecr-access-for-aws-lambda/
+# https://aws.amazon.com/premiumsupport/knowledge-center/secondary-account-access-ecr/
+# https://www.youtube.com/watch?v=YvqImD7pe9g
 
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
