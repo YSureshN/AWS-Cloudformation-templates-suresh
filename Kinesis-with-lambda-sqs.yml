@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: An AWS Lambda application.
+Parameters:
+  Environment:
+    Description: 'Environment: dev,qa,stg,prod' 
+    Type: String
+    Default: 'qa'
+    AllowedValues:
+      - dev
+      - qa
+      - stg
+      - prod
+    ConstraintDescription: must be either 'dev','qa','stg' or 'prod'
+
+  S3BucketName:
+    Description: The S3 bucket that contains the application code.
+    Type: String
+    Default: 'dev.telxxxxxxxxxx'
+
+  S3BucketKey:
+    Description: The S3 bucket that contains the application code.
+    Type: String
+    Default: 'lambda_function/telematics-TrackUnit-Processor/HERC.Telematics.TrackUnit.Processor.zip' #Using Dummy jar file for testing template
+  
+Mappings:
+  dev:
+    Layer:
+      "VpcId": "vpc-1081ac74"
+      "SubnetId1": "subnet-dd038785"
+      "SubnetId2": "subnet-bc28a093"
+      "SecurityGroupID": "sg-9bad17e3" # need to add sg-96aa31ee
+      "PubSubnetId1": "subnet-a04ee1f8"
+      "PubSubnetId2": "subnet-191faa33"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "7"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:dev}}"
+      "secretsmanager": "telematics/rdsaccess"
+      "SecretString": "dev"
+            
+  qa:
+    Layer:
+      "VpcId": "vpc-9ad5dafe"
+      "SubnetId1": "subnet-86e163de"
+      "SubnetId2": "subnet-b0813a9a"
+      "SecurityGroupID": "sg-9ecb8fe6"
+      "PubSubnetId1": "subnet-a6e062fe"
+      "PubSubnetId2": "subnet-2482390e"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "7"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:qa}}"
+      "secretsmanager": "telematics/qardsaccess"
+      "SecretString": "qa"
+
+  stg:
+    Layer:
+      "VpcId": "vpc-a29785c6"
+      "SubnetId1": "subnet-fdf1bdc0"
+      "SubnetId2": "subnet-f54d3383"
+      "SecurityGroupID": "sg-9bad17e3"
+      "PubSubnetId1": "subnet-024f3174"
+      "PubSubnetId2": "subnet-85f0bcb8"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "14"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:stg}}"
+      "secretsmanager": "xxxxxxxx"
+      "SecretString": "stg"
+
+  prod:
+    Layer:
+      "VpcId": "vpc-e8ece28c"
+      "SubnetId1": "subnet-ca7e0bbc"
+      "SubnetId2": "subnet-939d27b9"
+      "SecurityGroupID": "sg-9bad17e3"
+      "PubSubnetId1": "subnet-cb7e0bbd"
+      "PubSubnetId2": "subnet-0ece4356"
+      "RawDataS3Bucket": "dev.telematics.inartifacts"
+      "ProcessedDataS3Bucket": "dev.telematics.outartifacts"
+      "RetentionInDays": "30"
+      #"ConnectionString": "{{resolve:secretsmanager:telematics/elevate:SecretString:prod}}"
+      "secretsmanager": "xxxxxxxx"
+      "SecretString": "prod"
+
+Resources:
+  TelematicsTrackunitProcessor:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - Trackunit-processor
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment         
+        - Key: "ResourceType"
+          Value: "Lambda"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - Trackunit-processor
+    
+      Handler: HERC.Telematics.TrackUnit.Processor::HERC.Telematics.TrackUnit.Processor.TrackUnitProcessor::FunctionHandler
+      Runtime: dotnetcore3.1
+      TracingConfig:
+        Mode: Active
+      Code:
+        S3Bucket: 
+          Ref: S3BucketName
+        S3Key: 
+          Ref: S3BucketKey
+    #   Environment:
+    #     Variables:
+    #       secretsmanager: !FindInMap [ !Ref "Environment", Layer, secretsmanager ]
+    #       SecretString: !FindInMap [ !Ref "Environment", Layer, SecretString ]
+      Description: .NET function
+      MemorySize: 512
+      Timeout: 15
+      VpcConfig:
+        SubnetIds:
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId1 ]
+          - !FindInMap [ !Ref "Environment", Layer, SubnetId2 ]
+        SecurityGroupIds: 
+          - !FindInMap [ !Ref "Environment", Layer, SecurityGroupID ]
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/Telematics-LambdaAccessRole
+  
+  KinesisStream:
+    Type: AWS::Kinesis::Stream
+    #DependsOn: TelematicsTrackunitProcessor
+    Properties: 
+      Name: 
+        'Fn::Join':
+          - '-'
+          - - Ref: Environment
+            - telemetry-raw-data-stream
+      RetentionPeriodHours: 24
+      ShardCount: 3
+      StreamModeDetails: 
+        StreamMode: PROVISIONED
+      Tags: 
+        - Key: "Environment"
+          Value: 
+            Ref: Environment  
+        - Key: "Application"
+          Value: "ProControl-Telematics"     
+        - Key: "ResourceType"
+          Value: "Kinesis"
+        - Key: "CostCenter"
+          Value: "9038"
+        - Key: "ITOwner"
+          Value: "Sunil Gupta"
+        - Key: "Name"
+          Value: 
+            'Fn::Join':
+              - '-'
+              - - Ref: Environment
+                - telemetry-raw-data-stream
+  
+  LambdaTrigger:
+    Type: 'AWS::Lambda::EventSourceMapping'
+    DependsOn: 
+      - KinesisStream
+      - TelematicsTrackunitProcessor
+    Properties:
+      BatchSize: 100
+      MaximumRecordAgeInSeconds: -1
+      MaximumRetryAttempts: 3
+      StartingPosition: AT_TIMESTAMP
+      EventSourceArn:
+        Fn::GetAtt:
+          - "KinesisStream"
+          - "Arn"
+      FunctionName:
+        Fn::GetAtt:
+          - "TelematicsTrackunitProcessor"
+          - "Arn"
+
+  EventInvokeConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+        FunctionName: !Ref TelematicsTrackunitProcessor
+        Qualifier: $LATEST
+        MaximumEventAgeInSeconds: 600
+        MaximumRetryAttempts: 0
+        DestinationConfig:
+          OnFailure:
+              Destination: arn:aws:kinesis:us-east-1:xxxxxxxxxxx:stream/qa-telemetry-raw-data-stream
+
+  TrackunitProcessorLambdaTrigger:
+    Type: 'AWS::Lambda::EventSourceMapping'
+    DependsOn: 
+      - KinesisStream
+      - TelematicsTrackunitProcessor
+    Properties:
+      BatchSize: 100
+      MaximumRecordAgeInSeconds: -1
+      MaximumRetryAttempts: 3
+      StartingPosition: AT_TIMESTAMP
+      EventSourceArn:
+        Fn::GetAtt:
+          - "KinesisStream"
+          - "Arn"
+      FunctionName:
+        Fn::GetAtt:
+          - "TelematicsTrackunitProcessor"
+          - "Arn"
+
+  TrackunitProcessorEventInvokeConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+        FunctionName: !Ref TelematicsTrackunitProcessor
+        Qualifier: $LATEST
+        MaximumEventAgeInSeconds: 600
+        MaximumRetryAttempts: 0
