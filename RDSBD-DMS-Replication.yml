@@ -8,14 +8,14 @@ Parameters:
             VPC where to setup DMS instance.
             DMS instance should have connectivity to RDS instance.            
         Type: String
-        Default: vpc-1081ac74
+        Default: vpc-xxxxxxx
 
     SubnetIds:
         Description: >
             Subnets for DMS subnet group. Must contain at least two
             subnets in two different Availability Zones in the same region.            
         Type: String
-        Default: subnet-6578ff3d
+        Default: subnet-xxxxxx
         
 
     SecurityGroupIds:
@@ -23,7 +23,7 @@ Parameters:
             Security Group IDs for DMS subnet group. Must contain at least two
             subnets in two different Availability Zones in the same region.            
         Type: String
-        Default: sg-96aa31ee
+        Default: sg-96axxxxxx
 
     ReplicationInstanceAllocatedStorage:
         Description: >
@@ -45,25 +45,25 @@ Parameters:
         Description: >
                         DB schema name, which will be migrated
         Type: String
-        Default: Telematics
+        Default: Txxxxxxxx
 
     SrcDbName:
         Description: >
                         Source DB name
         Type: String
-        Default: dbo
+        Default: dbxxxxxxx
 
     SrcDbUsername:
         Description: >
                         Source DB username
         Type: String
-        Default: svc_Elevate_DB
+        Default: xxxxxxxx
 
     SrcDbPassword:
         Description: >
                         Source DB password
         Type: String
-        Default: "stu_Ri&7w9Yu"
+        Default: "sxxxxxxx"
 
     SrcDbEngine:
         Description: >
@@ -77,7 +77,7 @@ Parameters:
         Description: >
                         Source DB hostname
         Type: String
-        Default: dev-telematics.cexgg1uw0zjn.us-east-1.rds.amazonaws.com
+        Default: dxxxxx-txxxxxxx.cexxxxxxxxxx.us-east-1.rds.amazonaws.com
 
     SrcDbPort:
         Description: >
@@ -153,52 +153,7 @@ Parameters:
         Type: String
         Default: full-load
 
-# Metadata:
-#     AWS::CloudFormation::Interface:
-#         ParameterGroups:
-#             -
-#                 Label:
-#                     default: "Network Configuration"
-#                 Parameters:
-#                     - Vpc
-#                     - SubnetIds
-#             -
-#                 Label:
-#                     default: "Replication Instance Parameters"
-#                 Parameters:
-#                     - ReplicationInstanceAllocatedStorage
-#                     - ReplicationInstanceClass
-#                     - SecurityGroupIds
-#             -
-#                 Label:
-#                     default: "Source Endpoint Parameters"
-#                 Parameters:
-#                     - SrcDbName
-#                     - SrcDbUsername
-#                     - SrcDbPassword
-#                     - SrcDbServerName
-#                     - SrcDbPort
-#                     - SrcDbEngine
-#             -
-#                 Label:
-#                     default: "Target Endpoint Parameters"
-#                 Parameters:
-#                     - DstDbName
-#                     - DstDbUsername
-#                     - DstDbPassword
-#                     - DstDbServerName
-#                     - DstDbPort
-#                     - DstDbEngine
-#             -
-#                 Label:
-#                     default: "Replication Task Parameters"
-#                 Parameters:
-#                     - DbSchemaName
-#                     - DmsReplicationTaskMigrationType
-#                     - DmsReplicationTaskEnableLogging
-#                     - DmsReplicationTaskSupportLOBs
-#                     - DstDbPort
-#                     - DstDbEngine
+
 
 Resources:
 
