@@ -1,0 +1,50 @@
+# https://docs.aws.amazon.com/solutions/latest/real-time-web-analytics-with-kinesis/deployment.html
+
+Parameter	Default	Description
+User Name	<Requires input>	
+User name to access the real-time dashboard
+
+User Email Address	<Requires input>	
+Email address of dashboard user. After launch, an email will be sent to this address with dashboard login instructions.
+
+CloudWatch Dashboard	Yes	
+Choose whether to deploy the Amazon CloudWatch metrics dashboard
+
+CORS Origin	*	
+The value that is returned by the Access-Control-Allow-Origin header. A star (*) value will support any origin. We recommend specifying a specific origin (e.g. http://example.com) to restrict cross-site access to your API.
+
+Node Requests/Min	50K	
+The number of requests per minute that each beacon node will support. Choose 50K or 100K.
+
+Min Beacon Servers	2	
+The minimum number of beacon web servers. For high availability, specify at least 2.
+
+Max Beacon Servers	6	
+The maximum number of beacon servers
+
+SSH Key Pair	<Requires input>	
+Public and private key pair, which allows you to connect securely to the beacon web servers. When you created an AWS account, this is the key pair you created in your preferred AWS Region.
+
+Enable SSH?	false	
+Choose whether to allow SSH access to beacon servers. If you select true for this parameter, you must specify an SSH Key Pair and a CIDR block in the Enable SSH From parameter.
+
+Note
+This solution's beacon web servers are configured to be managed by AWS Systems Manager. As a result, you can use Run Command to connect to the beacon server instead of SSH.
+
+Enable SSH From	<Optional input>	
+This IP address CIDR block will have access to the beacon web servers
+
+Beacon Server VPC CIDR	10.0.0.0/23	
+CIDR block for the new VPC for the beacon web servers
+
+1st Subnet Network	10.0.0.0/24	
+CIDR block for the new VPC public subnet created in AZ1
+
+2nd Subnet Network	10.0.1.0/24	
+CIDR block for the new VPC public subnet created in AZ2
+
+1st Subnet AZ #	0	
+The Availability Zone number for the first public subnet
+
+2nd Subnet AZ #	1	
+The Availability Zone number for the second public subnet
